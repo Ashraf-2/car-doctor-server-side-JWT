@@ -2,17 +2,26 @@ const express = require('express');
 const cors = require('cors');
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 require('dotenv').config()
+const jwt = require('jsonwebtoken');
+const cookieParser = require('cookie-parser');
+
+
 const app = express();
 const port = process.env.PORT || 5000;
 
+
 //middleware
-app.use(cors());
+app.use(cors({
+    origin: ['http://localhost:5173'],
+    credentials: true
+}));
 app.use(express.json());
+app.use(cookieParser());
 
 //mongodb connect
 
-console.log(process.env.DB_PASS)
-console.log(process.env.DB_USER)
+// console.log(process.env.DB_PASS)
+// console.log(process.env.DB_USER)
 
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.bx5otjq.mongodb.net/?retryWrites=true&w=majority`;
 
@@ -24,8 +33,12 @@ const client = new MongoClient(uri, {
         deprecationErrors: true,
     }
 });
-//car_doctor_user 
-//qV2V8sMHZ5UpDJql
+
+//self-created middleWears
+const logger = async(req,res, next) => {
+    console.log('called : ', req.host, req.originalUrl)
+    next();
+}
 
 async function run() {
     try {
@@ -34,6 +47,26 @@ async function run() {
 
         const servicesCollection = client.db('cars-doctor').collection('services');
         const bookingCollection = client.db('cars-doctor').collection('bookings');
+
+        //auth related api
+        app.post('/jwt',  async(req,res) => {
+            const user = req.body;
+            console.log(user);
+            // console.log(process.env.ACCESS_TOKEN_SECRET);
+            
+            //step1
+            const token = jwt.sign(user, process.env.ACCESS_TOKEN_SECRET, {expiresIn: '500hr'});
+
+            //step2
+            res.cookie('token',token, {
+                httpOnly: true,
+                secure: false
+            })
+            res.send({success: true})
+        })
+
+
+        //services related api
 
         app.get('/services', async (req, res) => {
             const cursor = servicesCollection.find();
@@ -60,6 +93,7 @@ async function run() {
         
         app.get('/bookings', async(req,res)=> {
             console.log(req.query.email);
+            console.log('ttt token :', req.cookies.token)
             let query= {};
             if(req.query?.email){
                 query = {email: req.query.email};
@@ -68,6 +102,7 @@ async function run() {
             const result = await cursor.toArray();
             res.send(result);
         })
+        //require('crypto').randomBytes(64).toString('hex')
 
         //to store/create
         app.post('/bookings', async(req,res)=> {
